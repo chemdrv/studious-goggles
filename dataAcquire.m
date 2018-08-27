@@ -1,40 +1,67 @@
-%dataAcquire is a script to grab real time data, plot it, and save it as
-%the user specifies.  This version uses the function dataGen to generate
-%data, which is a random number generator to stand in for data generated on
-%a DAQ board.
-%Created 10/10/17 by Marie van Staveren
+% dataAcquire.m
+% This script acquires data from a daq board, plots it in real time, then
+% allows the user to save the data to a text file they specify.
+%
+% Written by Marie van Staveren, 8/18
+clear all;
+close all;
+daqreset;                    % Resets all daq sessions
 
+% Create global variables for voltage and time
+global timeArray;
+global sampleTempArray;
 
-%begin by asking for user inputs
+%These lines set up a daq session, opening one channel.  The duration is
+%set to a very long time, knowing that it will be stopped by the user.
+%
 pointsPerSecond=input('How many points do you want to acquire each second? ');
-runLength=input('How many seconds long should the program acquire? ');
 
-%initialize vectors for data storage, as well as an iterator to count
-%cycles run, and a reading of the inital time.
-dataArray=[];
-timeArray=[];
-i=0;
-timeInitial=clock();
+daqboard=daq.createSession('ni');
+daqboard.addAnalogInputChannel('dev2','ai0','Voltage');
+daqboard.Rate = pointsPerSecond;
+daqboard.DurationInSeconds = 100000;
+global startTime;
+startTime=clock();
 
-%this is the main program loop.  Each iteration compares the elapsed time
-%to the user specified time as the exit condition for the loop.
-while (etime(clock(),timeInitial)<runLength)
-    i=i+1;  %an iterator which counts each loop run to disply on the plot
-    %[dataArray(end+1), timeArray(end+1)]=Fast_DAQ; % store the current call of dataGen at the end of dataArray
-    dataArray(end+1)=dataGen;
-    timeArray(end+1)=etime(clock(),timeInitial); %store the elapsed time at the end of timeArray
-    plot(timeArray,dataArray,'o') %plot the data vs. time with points
-    title(['Acquisition number ', num2str(i)]) % put a title on the plot that shows the acquisition number
-    pause(1/pointsPerSecond) %pause for the length specified by the user before running the next loop
-    
+% These lines set up a listener, which acquires data from the daqboard in
+% the background, and runs the function GetAndPlotData when data exists to
+% be plotted.
+lh = addlistener(daqboard,'DataAvailable', @GetAndPlotData); % Creates a handle for the listener
+daqboard.NotifyWhenDataAvailableExceeds = 2; % Plot will update Rate*DurationInSeconds/NotifyWhenDataAvailableExceeds times per second
+daqboard.startBackground();                   % Initiate background data collection
+
+% The program stops at the line below until the user inputs something and presses
+% enter, at which point the daqboard is stopped.  Then the handle is
+% deleted and the daqboard is released for use by other programs.
+a=input('Press ENTER to stop');% Wait until acquisition is complete
+daqboard.stop();
+delete(lh);  % Deletes the listener handle
+daqboard.release()
+
+% The data to be saved gets put into one matrix, and then written to a
+% texxt file of the users choice.
+dataToSave = [timeArray',sampleTempArray'];
+%fileToSave = input('What filname would you like to save to?\n(Use the extension .txt): ', 's');
+%fid=fopen(fileToSave,'w');
+%fprintf(fid,'%9.5f %9.5f\n',dataToSave);
+%fclose(fid);
+
+% This function converts the raw voltages to temperatures according to the
+% calibrations below, then plots data.  It also stores the data in two
+% global variables so they can be accessed later for saving.
+function GetAndPlotData(src,event)
+    global startTime;
+    global timeArray; %array
+    global sampleTempArray; %array
+    timeNow=etime(clock(),startTime); %single time point
+    sampleTempNow=event.Data(:,1)*1+0; %single data point
+    plot(timeNow, sampleTempNow,'.');
+    xlabel('time')
+    ylabel('T_{sample}')
+    hold on
+    timeArray=[timeArray; timeNow];      % Builds growing time array; size of this array = Rate*DurationInSeconds
+    sampleTempArray=[sampleTempArray; sampleTempNow];      % Builds growing voltage array; size of this array = Rate*DurationInSeconds
 end
-timeFinal=clock();
-etime(timeFinal,timeInitial) %not really needed anymore, but prints out the total elapsed time into the command window
 
-%this last section saves the data.
-dataToSave = [timeArray; dataArray] %the two arrays of data are put together into one matrix
-fileToSave = input('Acquisition finished. What filename would you like to save the data to? ', 's'); %the user is asked to name a file, which needs to include an extension, for saving
-fid=fopen(fileToSave,'w'); %the specified file is opened
-fprintf(fid, '%8.2f %8.5f\r', dataToSave); %the data is printed to the file with 2 digits of floating poin precision
-fclose(fid); %the file is closed
+
 
