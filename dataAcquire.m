@@ -41,10 +41,10 @@ daqboard.release()
 % The data to be saved gets put into one matrix, and then written to a
 % texxt file of the users choice.
 dataToSave = [timeArray',sampleTempArray'];
-%fileToSave = input('What filname would you like to save to?\n(Use the extension .txt): ', 's');
-%fid=fopen(fileToSave,'w');
-%fprintf(fid,'%9.5f %9.5f\n',dataToSave);
-%fclose(fid);
+fileToSave = input('What filname would you like to save to?\n(Use the extension .txt): ', 's');
+fid=fopen(fileToSave,'w');
+fprintf(fid,'%9.5f %9.5f\n',dataToSave);
+fclose(fid);
 
 % This function converts the raw voltages to temperatures according to the
 % calibrations below, then plots data.  It also stores the data in two
